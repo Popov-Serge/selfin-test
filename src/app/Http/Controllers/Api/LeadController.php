@@ -23,7 +23,7 @@ final class LeadController
                 'birth_date' => $data['birth_date'],
                 'phone' => $data['phone'],
                 'email' => $data['email'] ?? null,
-                'amount' => $data['amount'],
+                'amount' => $data['amount'] * 100,
                 'term' => $data['term'],
                 'issuing_region' => $data['issuing_region'] ?? null,
                 'issuing_region_kladr_id' => $data['issuing_region_kladr_id'] ?? null,
