@@ -1,0 +1,52 @@
+{
+  "first_name": "Иван",
+  "last_name": "Иванов",
+  "patronymic": "Иванович",
+  "birth_date": "1990-01-01",
+  "phone": "+79161234567",
+  "email": "ivan@example.com",
+  "amount": 10000,
+  "term": 7,
+  "issuing_region": "Санкт-Петербург",
+  "issuing_region_kladr_id": "78",
+  "issuing_city": "2",
+  "employmentType": "OPEN_ENDED_EMPLOYMENT_CONTRACT",
+  "income": "120000",
+  "education_type": "HIGHER",
+  "marital_status": "MARRIED",
+  "passport": {
+    "series": "1234",
+    "number": "567890",
+    "issued_by": "ГУ МВД РОССИИ ПО Г. МОСКВЕ",
+    "issued_date": "2025-04-04",
+    "division_code": "770-123"
+  },
+  "address_registration": {
+    "region": "Респ Адыгея",
+    "region_kladr_id": "01",
+    "city": "г Адыгейск",
+    "street": "Ленина",
+    "house": "1",
+    "housing": "2",
+    "flat": "3"
+  },
+  "address_residence": {
+    "region": "Краснодарский край",
+    "region_kladr_id": "23",
+    "city": "г Краснодар",
+    "street": "Кирилла Росинского",
+    "house": "3/1",
+    "housing": "1",
+    "flat": "356"
+  },
+  "sub_ids": {
+    "sub_id_1": "1787918658153795726",
+    "sub_id_2": "",
+    "sub_id_3": "",
+    "sub_id_4": null,
+    "sub_id_5": false,
+    "sub_id_6": "",
+    "sub_id_7": "",
+    "sub_id_8": ""
+  }
+}

@@ -1,0 +1,79 @@
+# Laravel env lives in src/.env (standard). Compose reads it via --env-file:
+#   docker compose --env-file=src/.env up -d
+# bin/up.sh does this for you.
+
+services:
+  app:
+    user: "1000:1000"
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    working_dir: /var/www/html
+    volumes:
+      - ./src:/var/www/html
+    # No env_file: PHP loads /var/www/html/.env itself (Laravel default).
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [lead-network]
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports: ["${APP_PORT:-8080}:80"]
+    volumes:
+      - ./src:/var/www/html:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on: [app]
+    networks: [lead-network]
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-lead_service}
+      MYSQL_USER: ${DB_USERNAME:-lead_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-lead_password}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_password}
+    ports: ["${DB_FORWARD_PORT:-3307}:3306"]
+    volumes: [mysql_data:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [lead-network]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["${REDIS_FORWARD_PORT:-6380}:6379"]
+    volumes: [redis_data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [lead-network]
+  queue:
+    user: "1000:1000"
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    working_dir: /var/www/html
+    command: php artisan queue:work redis --sleep=1 --timeout=60
+    volumes:
+      - ./src:/var/www/html
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - lead-network
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  lead-network:
+    driver: bridge

@@ -1,0 +1,393 @@
+openapi: 3.1.2
+
+info:
+  title: Lead Delivery API
+  version: 1.0.0
+  description: |
+    API сервиса приёма заявок и передачи их партнёрам.
+    Сумма заявки передаётся в рублях целым числом.
+    Сумма в webhook передаётся строкой с точностью до двух знаков
+    после запятой.
+
+servers:
+  - url: http://localhost:8080
+    description: Локальное окружение
+
+tags:
+  - name: Leads
+    description: Приём заявок
+  - name: Partner Webhook
+    description: Получение результатов обработки заявок от партнёров
+  - name: Metrics
+    description: Метрики доставки
+
+paths:
+  /api/leads:
+    post:
+      tags: [Leads]
+      summary: Принять заявку
+      description: |
+        Сохраняет заявку и ставит её на асинхронную доставку всем
+        активным партнёрам. В ответе возвращается количество созданных
+        заданий доставки.
+      operationId: createLead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadRequest'
+            example:
+              first_name: Иван
+              last_name: Иванов
+              patronymic: Иванович
+              birth_date: '1990-05-15'
+              phone: '+79991234567'
+              email: ivan@example.com
+              amount: 150000
+              term: 12
+              issuing_region: Краснодарский край
+              issuing_region_kladr_id: '2300000000000'
+              issuing_city: Краснодар
+              employmentType: employed
+              income: '100000'
+              education_type: higher
+              marital_status: married
+              passport:
+                series: '0312'
+                number: '123456'
+                issued_by: МВД России
+                issued_date: '2015-05-20'
+                division_code: '230-001'
+              address_registration:
+                region: Краснодарский край
+                region_kladr_id: '2300000000000'
+                city: Краснодар
+                street: Красная
+                house: '10'
+                housing: '1'
+                flat: '25'
+              address_residence:
+                region: Краснодарский край
+                region_kladr_id: '2300000000000'
+                city: Краснодар
+                street: Северная
+                house: '20'
+                housing: null
+                flat: '15'
+              sub_ids:
+                sub_id_1: campaign-1
+                sub_id_2: source-1
+      responses:
+        '202':
+          description: Заявка принята в обработку
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message, lead_id, deliveries_queued]
+                properties:
+                  message:
+                    type: string
+                    const: Lead accepted
+                  lead_id:
+                    type: integer
+                    description: Идентификатор созданной заявки
+                  deliveries_queued:
+                    type: integer
+                    description: Количество поставленных в очередь доставок
+              example:
+                message: Lead accepted
+                lead_id: 1
+                deliveries_queued: 2
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/webhook/status:
+    post:
+      tags: [Partner Webhook]
+      summary: Получить результат обработки заявки
+      description: |
+        Принимает статус доставки от аутентифицированного партнёра.
+        Повторная отправка идентичного события обрабатывается идемпотентно.
+        Для статуса approved сумма учитывается в доходах доставки.
+      operationId: receivePartnerStatus
+      security:
+        - PartnerBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerWebhookRequest'
+            example:
+              request_id: partner-request-123
+              status: approved
+              amount: '1500.00'
+      responses:
+        '200':
+          description: Событие обработано или уже было принято ранее
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, event_id]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+                  event_id:
+                    type: integer
+              example:
+                status: ok
+                event_id: 42
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          description: Доставка с указанными request_id и партнёром не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: Delivery not found
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/metrics/deliveries:
+    get:
+      tags: [Metrics]
+      summary: Получить метрики доставки
+      description: Возвращает количество доставок по статусам.
+      operationId: getDeliveryMetrics
+      responses:
+        '200':
+          description: Текущие агрегированные метрики
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - successful_deliveries
+                  - failed_deliveries
+                  - pending_deliveries
+                properties:
+                  successful_deliveries:
+                    type: integer
+                    minimum: 0
+                  failed_deliveries:
+                    type: integer
+                    minimum: 0
+                  pending_deliveries:
+                    type: integer
+                    minimum: 0
+              example:
+                successful_deliveries: 10
+                failed_deliveries: 2
+                pending_deliveries: 3
+
+components:
+  securitySchemes:
+    PartnerBearerAuth:
+      type: http
+      scheme: bearer
+      description: Токен партнёра, полученный при настройке интеграции.
+
+  schemas:
+    LeadRequest:
+      type: object
+      required:
+        - first_name
+        - last_name
+        - birth_date
+        - phone
+        - amount
+        - term
+        - passport
+        - address_registration
+        - address_residence
+        - sub_ids
+      properties:
+        first_name:
+          type: string
+          maxLength: 100
+        last_name:
+          type: string
+          maxLength: 100
+        patronymic:
+          type: [string, 'null']
+          maxLength: 100
+        birth_date:
+          type: string
+          format: date
+          description: Дата рождения в формате YYYY-MM-DD
+        phone:
+          type: string
+          maxLength: 32
+        email:
+          type: [string, 'null']
+          format: email
+          maxLength: 255
+        amount:
+          type: integer
+          minimum: 1
+          description: Сумма заявки в рублях
+        term:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        issuing_region:
+          type: [string, 'null']
+          maxLength: 255
+        issuing_region_kladr_id:
+          type: [string, 'null']
+          maxLength: 32
+        issuing_city:
+          type: [string, 'null']
+          maxLength: 255
+        employmentType:
+          type: [string, 'null']
+          maxLength: 255
+        income:
+          type: [string, 'null']
+          maxLength: 255
+        education_type:
+          type: [string, 'null']
+          maxLength: 255
+        marital_status:
+          type: [string, 'null']
+          maxLength: 255
+        passport:
+          $ref: '#/components/schemas/Passport'
+        address_registration:
+          $ref: '#/components/schemas/Address'
+        address_residence:
+          $ref: '#/components/schemas/Address'
+        sub_ids:
+          $ref: '#/components/schemas/SubIds'
+
+    Passport:
+      type: object
+      required: [series, number, issued_by, issued_date, division_code]
+      properties:
+        series:
+          type: string
+          maxLength: 20
+        number:
+          type: string
+          maxLength: 20
+        issued_by:
+          type: string
+          maxLength: 255
+        issued_date:
+          type: string
+          format: date
+        division_code:
+          type: string
+          maxLength: 20
+
+    Address:
+      type: object
+      required: [region, city, street, house]
+      properties:
+        region:
+          type: string
+          maxLength: 255
+        region_kladr_id:
+          type: [string, 'null']
+          maxLength: 32
+        city:
+          type: string
+          maxLength: 255
+        street:
+          type: string
+          maxLength: 255
+        house:
+          type: string
+          maxLength: 50
+        housing:
+          type: [string, 'null']
+          maxLength: 50
+        flat:
+          type: [string, 'null']
+          maxLength: 50
+
+    SubIds:
+      type: object
+      properties:
+        sub_id_1:
+          type: [string, 'null']
+          maxLength: 255
+        sub_id_2:
+          type: [string, 'null']
+          maxLength: 255
+        sub_id_3:
+          type: [string, 'null']
+          maxLength: 255
+        sub_id_4:
+          type: [string, 'null']
+          maxLength: 255
+        sub_id_5:
+          description: Дополнительный идентификатор без ограничения типа
+        sub_id_6:
+          type: [string, 'null']
+          maxLength: 255
+        sub_id_7:
+          type: [string, 'null']
+          maxLength: 255
+        sub_id_8:
+          type: [string, 'null']
+          maxLength: 255
+
+    PartnerWebhookRequest:
+      type: object
+      required: [request_id, status, amount]
+      properties:
+        request_id:
+          type: string
+          maxLength: 255
+        status:
+          type: string
+          enum: [approved, rejected]
+        amount:
+          type: string
+          pattern: '^\d+(\.\d{1,2})?$'
+          example: '1500.00'
+          description: Денежная сумма в рублях, не более двух знаков после запятой.
+
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+
+  responses:
+    Unauthenticated:
+      description: Отсутствует или недействителен токен партнёра
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: Unauthenticated.
+
+    ValidationError:
+      description: Ошибка валидации входных данных
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+              errors:
+                type: object
+                additionalProperties:
+                  type: array
+                  items:
+                    type: string
+          example:
+            message: The given data was invalid.
+            errors:
+              phone:
+                - The phone field is required.
